@@ -44,6 +44,23 @@ public sealed class PackageRestorer
     }
 
     /// <summary>
+    /// Leest manifest.json rechtstreeks uit een .pctbackup-zipbestand, zonder
+    /// eerst alles uit te pakken - gebruikt om na ontvangst snel te bepalen
+    /// van welk platform (Windows/Android) een pakket komt, zodat de UI kan
+    /// kiezen welke terugzet-actie het meest zinvol is (volledig terugzetten
+    /// vs. gewoon uitpakken naar een map).
+    /// </summary>
+    public static PackageManifest ReadManifestFromZip(string zipPath)
+    {
+        using var archive = ZipFile.OpenRead(zipPath);
+        var entry = archive.GetEntry("manifest.json")
+                    ?? throw new InvalidOperationException("Dit is geen geldig PCTransfer11-pakket (manifest.json ontbreekt).");
+        using var stream = entry.Open();
+        return JsonSerializer.Deserialize<PackageManifest>(stream)
+               ?? throw new InvalidOperationException("Het manifest kon niet worden gelezen.");
+    }
+
+    /// <summary>
     /// Pakt een .pctbackup-zipbestand volledig uit naar <paramref name="destDir"/>
     /// (behoudt de mapstructuur uit het pakket, bv. "Documenten/", "Afbeeldingen/",
     /// "_instellingen/"), met per-bestand voortgang. Anders dan

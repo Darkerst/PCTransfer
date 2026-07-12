@@ -347,12 +347,62 @@ public partial class MainWindow : Window
             Log($"Back-up bewaard in: {savedPackagePath}");
             try { File.Delete(tempPackagePath); } catch { /* best effort - tijdelijk bestand, niet kritisch */ }
 
-            var result = MessageBox.Show(
+            // Herkomst bepalen (zonder alles al uit te pakken) - bepaalt welke
+            // terugzet-actie hieronder het meest zinvol is: van een Windows-pc
+            // kán alles (bestanden ÉN instellingen, incl. Wifi/netwerkadapter/
+            // register) direct op dit systeem toegepast worden; van een
+            // telefoon is "gewoon uitpakken naar een herkenbare map" zinniger
+            // (instellingen als contacten/SMS hebben op Windows toch geen
+            // toepassingsdoel, en de foto's/video's wil je vaak niet zomaar
+            // laten samensmelten met je eigen Documenten/Afbeeldingen).
+            bool isWindowsSourced;
+            try
+            {
+                var peekManifest = PackageRestorer.ReadManifestFromZip(savedPackagePath);
+                isWindowsSourced = !peekManifest.ToolVersion.Contains("android", StringComparison.OrdinalIgnoreCase);
+                Log($"Herkomst: {DescribeOrigin(peekManifest)}.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Kon de herkomst niet bepalen ({ex.Message}) - uitpakken naar een map wordt gebruikt.");
+                isWindowsSourced = false;
+            }
+
+            if (isWindowsSourced)
+            {
+                var result = MessageBox.Show(
+                    $"Het pakket komt van een Windows-pc en is bewaard in:\n{savedPackagePath}\n\n" +
+                    "Nu meteen ALLES terugzetten op dit systeem? Bestanden gaan naar Documenten/Afbeeldingen/" +
+                    "Video's/Muziek/Downloads, en instellingen (Wifi, netwerkadapter, register, browsergegevens, " +
+                    "enz.) worden direct op dit systeem toegepast.",
+                    "PCTransfer11", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    var restorer = new PackageRestorer(_logProgress);
+                    await Task.Run(() => restorer.RestoreZipAsync(savedPackagePath, overwriteExisting: true, _percentProgress, ct, _currentFileProgress), ct);
+                    try
+                    {
+                        Directory.Delete(devicesRoot, recursive: true);
+                        Log($"Ingepakte versie opgeruimd: {devicesRoot}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Kon de ingepakte versie niet opruimen: {ex.Message}");
+                    }
+                    MessageBox.Show(
+                        "Terugzetten voltooid - alle bestanden en instellingen zijn direct op dit systeem toegepast.",
+                        "PCTransfer11", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                return;
+            }
+
+            var extractResult = MessageBox.Show(
                 $"Het pakket is ontvangen en bewaard in:\n{savedPackagePath}\n\nNu meteen uitpakken naar een map " +
                 $"'{label}' in je Downloads-map?",
                 "PCTransfer11", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
-            if (result == MessageBoxResult.Yes)
+            if (extractResult == MessageBoxResult.Yes)
             {
                 string downloadsFolder = FileSelectionItem.ResolveKnownFolder("Downloads")
                                           ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
