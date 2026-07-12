@@ -86,50 +86,11 @@ public partial class MainWindow : Window
         InitializeAboutTab();
         if (_logFilePath != null)
             Log($"Logboek van deze sessie wordt opgeslagen in: {_logFilePath}");
+        Log(ElevatedNetworkHelper.IsProcessElevated()
+            ? "Deze app draait met adminrechten (requireAdministrator) - Wifi/netwerkadapter/ontbrekende mappen worden direct verwerkt, zonder aparte UAC-vraag."
+            : "Let op: deze app draait NIET met adminrechten - Wifi/netwerkadapter/ontbrekende mappen vragen bij gebruik alsnog om een eigen UAC-bevestiging.");
 
-        Closing += (_, _) =>
-        {
-            _discoveryResponderCts?.Cancel();
-            ElevatedNetworkHelper.StopPersistentElevatedSession();
-        };
-        Loaded += async (_, _) => await OfferPersistentElevatedSessionAsync();
-    }
-
-    /// <summary>
-    /// Vraagt bij het opstarten ÉÉN keer of de gebruiker nu alvast adminrechten
-    /// wil geven voor de rest van de sessie, zodat latere Wifi/netwerkadapter/
-    /// ontbrekende-mappen-taken tijdens back-uppen/terugzetten geen aparte
-    /// UAC-onderbreking meer geven. Weigert de gebruiker (of de UAC-prompt),
-    /// dan valt de app terug op het vertrouwde gedrag van per keer vragen
-    /// zodra dat nodig is - niets breekt daardoor.
-    /// </summary>
-    private async Task OfferPersistentElevatedSessionAsync()
-    {
-        if (ElevatedNetworkHelper.IsProcessElevated())
-        {
-            Log("Deze app draait al met adminrechten (requireAdministrator) - geen aparte UAC-vraag nodig voor deze sessie.");
-            return;
-        }
-
-        var result = MessageBox.Show(
-            "Wil je nu alvast eenmalig adminrechten geven voor deze hele sessie?\n\n" +
-            "Dat voorkomt latere UAC-onderbrekingen tijdens het back-uppen/terugzetten van Wifi-netwerken, " +
-            "de netwerkadapter of een ontbrekende profielmap.\n\n" +
-            "Kies je 'Nee', dan wordt er (zoals voorheen) per keer om adminrechten gevraagd zodra dat nodig is.",
-            "PCTransfer11 - Adminrechten voor deze sessie",
-            MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes) return;
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        try
-        {
-            await ElevatedNetworkHelper.StartPersistentElevatedSessionAsync(cts.Token, _logProgress);
-        }
-        catch (Exception ex)
-        {
-            Log($"Kon geen doorlopende sessie met adminrechten starten: {ex.Message}");
-        }
+        Closing += (_, _) => _discoveryResponderCts?.Cancel();
     }
 
     private void InitializeFileItems()
@@ -209,6 +170,27 @@ public partial class MainWindow : Window
         foreach (char c in Path.GetInvalidFileNameChars())
             result = result.Replace(c, '_');
         return string.IsNullOrWhiteSpace(result) ? "onbekend-apparaat" : result;
+    }
+
+    /// <summary>
+    /// Bouwt een terugzet-item voor een instelling, en markeert 'm als
+    /// "niet ondersteund op dit platform" als er hier geen enkele bekende app
+    /// met dit AppId bestaat - dat betekent dat de back-up van het andere
+    /// platform komt (bv. Android-contacten in een back-up die je op Windows
+    /// bekijkt). Het geëxporteerde bestand staat gewoon in de back-up, maar
+    /// er is op dit platform geen automatische terugzet-actie voor.
+    /// </summary>
+    private static RestoreSelectionItem BuildSettingsRestoreItem(PackageManifest.SettingsEntry s)
+    {
+        bool supported = KnownApps.GetAll().Any(a => a.Id == s.AppId);
+        return new RestoreSelectionItem
+        {
+            DisplayName = supported ? $"Instellingen: {s.DisplayName}" : $"Instellingen: {s.DisplayName} (niet ondersteund op dit platform)",
+            Key = s.AppId,
+            IsSetting = true,
+            IsChecked = supported,
+            IsSupported = supported
+        };
     }
 
     private void OpenLogFolder_Click(object sender, RoutedEventArgs e)
@@ -631,7 +613,7 @@ public partial class MainWindow : Window
             foreach (var f in manifest.Files)
                 _restoreItems.Add(new RestoreSelectionItem { DisplayName = f.DisplayName, Key = f.PackagePath, IsSetting = false, IsChecked = true });
             foreach (var s in manifest.Settings)
-                _restoreItems.Add(new RestoreSelectionItem { DisplayName = $"Instellingen: {s.DisplayName}", Key = s.AppId, IsSetting = true, IsChecked = true });
+                _restoreItems.Add(BuildSettingsRestoreItem(s));
 
             RestoreItemsControl.ItemsSource = null;
             RestoreItemsControl.ItemsSource = _restoreItems;
@@ -671,7 +653,7 @@ public partial class MainWindow : Window
             foreach (var f in manifest.Files)
                 _restoreItems.Add(new RestoreSelectionItem { DisplayName = f.DisplayName, Key = f.PackagePath, IsSetting = false, IsChecked = true });
             foreach (var s in manifest.Settings)
-                _restoreItems.Add(new RestoreSelectionItem { DisplayName = $"Instellingen: {s.DisplayName}", Key = s.AppId, IsSetting = true, IsChecked = true });
+                _restoreItems.Add(BuildSettingsRestoreItem(s));
 
             RestoreItemsControl.ItemsSource = null;
             RestoreItemsControl.ItemsSource = _restoreItems;

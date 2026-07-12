@@ -38,6 +38,13 @@ public sealed class PackageBuilder
     private readonly IProgress<string> _log;
 
     /// <summary>
+    /// Begrenst hoeveel bestanden tegelijk gekopieerd worden (zie
+    /// CopyDirectoryRecursiveAsync) - genoeg om sneller te zijn dan strikt
+    /// serieel, zonder honderden bestandshandles tegelijk open te hebben.
+    /// </summary>
+    private static readonly SemaphoreSlim _copyLimiter = new(Math.Max(2, Environment.ProcessorCount));
+
+    /// <summary>
     /// Volledig, genormaliseerd pad van de back-updoelmap voor de huidige build,
     /// gebruikt door de runtime-guard in CopyDirectoryRecursiveAsync (tweede
     /// verdedigingslinie tegen zichzelf-in-zichzelf kopiëren). Wordt gezet aan
@@ -286,7 +293,11 @@ public sealed class PackageBuilder
             percentProgress?.Report(0.7);
             if (File.Exists(outputZipPath))
                 File.Delete(outputZipPath);
-            ZipFile.CreateFromDirectory(stagingDir, outputZipPath, CompressionLevel.Optimal, includeBaseDirectory: false);
+            // "Fastest" i.p.v. "Optimal": bij foto's/video's (al gecomprimeerd
+            // als JPEG/MP4/HEIC) levert een hoger compressieniveau nauwelijks
+            // kleinere bestanden op, maar kost wél merkbaar meer CPU-tijd -
+            // juist bij een telefoon-back-up (veel media) valt dat het meest op.
+            ZipFile.CreateFromDirectory(stagingDir, outputZipPath, CompressionLevel.Fastest, includeBaseDirectory: false);
             percentProgress?.Report(1.0);
 
             _log.Report($"Pakket klaar: {outputZipPath}");
@@ -404,10 +415,16 @@ public sealed class PackageBuilder
 
         Directory.CreateDirectory(destinationDir);
 
-        foreach (string filePath in Directory.EnumerateFiles(sourceDir))
+        // Bestanden binnen deze map gelijktijdig kopiëren (begrensd door
+        // _copyLimiter, gedeeld over de hele back-up) i.p.v. strikt één voor
+        // één - vooral bij veel kleine bestanden (foto's!) op een SSD een
+        // merkbare versnelling, zonder honderden bestanden tegelijk open te
+        // hebben staan.
+        var fileTasks = Directory.EnumerateFiles(sourceDir).Select(async filePath =>
         {
             ct.ThrowIfCancellationRequested();
             string destFile = Path.Combine(destinationDir, Path.GetFileName(filePath));
+            await _copyLimiter.WaitAsync(ct);
             try
             {
                 await CopyFileTrackedAsync(filePath, destFile, tracker, ct);
@@ -423,7 +440,12 @@ public sealed class PackageBuilder
                 // Geen toegang (bv. systeembestand) - overslaan.
                 _log.Report($"Overgeslagen (geen toegang): {filePath}");
             }
-        }
+            finally
+            {
+                _copyLimiter.Release();
+            }
+        });
+        await Task.WhenAll(fileTasks);
 
         foreach (string subDir in Directory.EnumerateDirectories(sourceDir))
         {

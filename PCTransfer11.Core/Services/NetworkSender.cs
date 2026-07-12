@@ -102,6 +102,14 @@ public sealed class NetworkSender
 
         log.Report("PIN klopt. Overdracht gestart (versleuteld) ...");
 
+        // Protocolversie eerst (1 byte, onversleuteld) - laat een toekomstige
+        // wijziging aan één kant meteen en duidelijk mislukken ("verouderde
+        // versie") in plaats van dat de twee kanten stilletjes uit sync raken
+        // en de rest van de bytes verkeerd wordt geïnterpreteerd (zoals bijna
+        // gebeurde toen de apparaatnaam werd toegevoegd). BELANGRIJK: dit
+        // getal moet exact gelijk zijn aan ProtocolVersion in de Android-kant.
+        await networkStream.WriteAsync(new[] { NetworkCrypto.ProtocolVersion }, ct);
+
         // Toestelnaam onversleuteld meesturen (net als iv/nonce hierboven), zodat de
         // ontvangende kant de overdracht een herkenbare naam kan geven i.p.v.
         // "Onbekend apparaat". Compatibel met de Android-kant, die ditzelfde

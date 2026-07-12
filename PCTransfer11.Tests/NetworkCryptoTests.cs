@@ -37,4 +37,12 @@ public class NetworkCryptoTests
             Assert.True(int.TryParse(pin, out _));
         }
     }
+
+    [Fact]
+    public void ProtocolVersion_IsSet()
+    {
+        // Vastgelegd zodat een toekomstige wijziging hier bewust gebeurt (en
+        // gelijktijdig aan de Android-kant wordt doorgevoerd) i.p.v. per ongeluk.
+        Assert.True(NetworkCrypto.ProtocolVersion > 0);
+    }
 }

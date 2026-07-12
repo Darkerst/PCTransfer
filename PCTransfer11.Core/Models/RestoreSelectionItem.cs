@@ -18,4 +18,13 @@ public sealed class RestoreSelectionItem
     /// Voor instellingen: PackageManifest.SettingsEntry.AppId.
     /// </summary>
     public string Key { get; set; } = "";
+
+    /// <summary>
+    /// Of dit item op DIT platform automatisch teruggezet kan worden. False
+    /// voor instellingen die van het andere platform komen (bv. Android-
+    /// contacten in een back-up die op Windows wordt teruggezet) - het
+    /// bijbehorende, geëxporteerde bestand staat wel gewoon in de back-up,
+    /// maar er is op dit platform geen automatische terugzet-actie voor.
+    /// </summary>
+    public bool IsSupported { get; set; } = true;
 }

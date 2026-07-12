@@ -20,6 +20,9 @@ public sealed class PackageRestorer
 {
     private readonly IProgress<string> _log;
 
+    /// <summary>Begrenst hoeveel bestanden tegelijk teruggezet worden (zie CopyDirectoryAsync).</summary>
+    private static readonly SemaphoreSlim _copyLimiter = new(Math.Max(2, Environment.ProcessorCount));
+
     public PackageRestorer(IProgress<string> log)
     {
         _log = log;
@@ -57,33 +60,55 @@ public sealed class PackageRestorer
         Directory.CreateDirectory(destDir);
         string fullDestRoot = Path.GetFullPath(destDir + Path.DirectorySeparatorChar);
 
-        using var archive = ZipFile.OpenRead(zipPath);
-        var entries = archive.Entries.Where(en => !string.IsNullOrEmpty(en.Name)).ToList(); // mapvermeldingen overslaan
-        long totalBytes = entries.Sum(en => en.Length);
-        long done = 0;
-
-        foreach (var entry in entries)
+        List<string> entryNames;
+        long totalBytes;
+        using (var archive = ZipFile.OpenRead(zipPath))
         {
-            ct.ThrowIfCancellationRequested();
-
-            string destPath = Path.GetFullPath(Path.Combine(destDir, entry.FullName));
-            if (!destPath.StartsWith(fullDestRoot, StringComparison.OrdinalIgnoreCase))
-                continue; // veiligheid tegen een kwaadaardig/corrupt zip-pad dat buiten destDir zou schrijven
-
-            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-            currentFileProgress?.Report($"Uitpakken: {entry.Name}");
-
-            await using var entryStream = entry.Open();
-            await using var outStream = File.Create(destPath);
-            byte[] buffer = new byte[81920];
-            int read;
-            while ((read = await entryStream.ReadAsync(buffer, ct)) > 0)
-            {
-                await outStream.WriteAsync(buffer.AsMemory(0, read), ct);
-                done += read;
-                percent?.Report(totalBytes == 0 ? 1.0 : (double)done / totalBytes);
-            }
+            var entries = archive.Entries.Where(en => !string.IsNullOrEmpty(en.Name)).ToList();
+            entryNames = entries.Select(en => en.FullName).ToList();
+            totalBytes = entries.Sum(en => en.Length);
         }
+
+        long done = 0;
+        // Verdeel de bestanden over een vast aantal werktaken, elk met hun
+        // EIGEN ZipArchive-handle (één instantie deelt geen gelijktijdige
+        // entry-reads toe) - sneller dan strikt één voor één, vooral bij veel
+        // kleine bestanden (foto's van een telefoon-back-up).
+        int concurrency = Math.Max(2, Environment.ProcessorCount);
+        var buckets = entryNames
+            .Select((name, i) => (name, i))
+            .GroupBy(x => x.i % concurrency)
+            .Select(g => g.Select(x => x.name).ToList());
+
+        var tasks = buckets.Select(async bucket =>
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            foreach (string entryName in bucket)
+            {
+                ct.ThrowIfCancellationRequested();
+                var entry = archive.GetEntry(entryName);
+                if (entry == null) continue;
+
+                string destPath = Path.GetFullPath(Path.Combine(destDir, entryName));
+                if (!destPath.StartsWith(fullDestRoot, StringComparison.OrdinalIgnoreCase))
+                    continue; // veiligheid tegen een kwaadaardig/corrupt zip-pad dat buiten destDir zou schrijven
+
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                currentFileProgress?.Report($"Uitpakken: {entry.Name}");
+
+                await using var entryStream = entry.Open();
+                await using var outStream = File.Create(destPath);
+                byte[] buffer = new byte[81920];
+                int read;
+                while ((read = await entryStream.ReadAsync(buffer, ct)) > 0)
+                {
+                    await outStream.WriteAsync(buffer.AsMemory(0, read), ct);
+                    long newDone = Interlocked.Add(ref done, read);
+                    percent?.Report(totalBytes == 0 ? 1.0 : (double)newDone / totalBytes);
+                }
+            }
+        });
+        await Task.WhenAll(tasks);
 
         percent?.Report(1.0);
     }
@@ -483,17 +508,26 @@ public sealed class PackageRestorer
             ct.ThrowIfCancellationRequested();
             Directory.CreateDirectory(dirPath.Replace(sourceDir, destinationDir));
         }
-        foreach (string filePath in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+        // Bestanden gelijktijdig kopiëren (begrensd door _copyLimiter) i.p.v.
+        // strikt één voor één - vooral bij veel kleine bestanden (foto's!) op
+        // een SSD een merkbare versnelling.
+        var fileTasks = Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories).Select(async filePath =>
         {
             ct.ThrowIfCancellationRequested();
             string dest = filePath.Replace(sourceDir, destinationDir);
             if (!overwrite && File.Exists(dest))
-                continue;
-            try { await CopyFileStreamedAsync(filePath, dest, tracker, ct); }
+                return;
+            await _copyLimiter.WaitAsync(ct);
+            try
+            {
+                await CopyFileStreamedAsync(filePath, dest, tracker, ct);
+            }
             catch (OperationCanceledException) { throw; }
             catch (IOException) { /* bestand in gebruik - overslaan */ }
             catch (UnauthorizedAccessException) { /* geen toegang - overslaan */ }
-        }
+            finally { _copyLimiter.Release(); }
+        });
+        await Task.WhenAll(fileTasks);
     }
 
     /// <summary>

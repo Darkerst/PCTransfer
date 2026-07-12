@@ -192,7 +192,19 @@
                                                 <DataTemplate>
                                                     <CheckBox Content="{Binding DisplayName}"
                                                               IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                              Margin="0,4"/>
+                                                              IsEnabled="{Binding IsSupported}"
+                                                              Margin="0,4">
+                                                        <CheckBox.Style>
+                                                            <Style TargetType="CheckBox">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSupported}" Value="False">
+                                                                        <Setter Property="ToolTip"
+                                                                                Value="Dit is geëxporteerd op het andere platform (Windows/Android) en staat gewoon in de back-up, maar heeft hier geen automatische terugzet-actie."/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </CheckBox.Style>
+                                                    </CheckBox>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>

@@ -22,6 +22,15 @@ internal static class NetworkCrypto
     private static readonly byte[] Salt = Encoding.UTF8.GetBytes("PCTransfer11-Network-Pairing-Salt-v1");
     private const int Pbkdf2Iterations = 100_000;
 
+    /// <summary>
+    /// Overdrachtsprotocol-versie (1 byte, direct na de PIN-check verstuurd/
+    /// gelezen). Verhoog dit getal ALTIJD samen aan beide kanten (Windows én
+    /// Android) zodra het bytformaat van de overdracht verandert (bv. een
+    /// nieuw veld) - zo krijg je bij een mismatch een duidelijke foutmelding
+    /// in plaats van een overdracht die stilletjes verkeerd wordt gelezen.
+    /// </summary>
+    public const byte ProtocolVersion = 2;
+
     public static byte[] DeriveKey(string pin) =>
         Rfc2898DeriveBytes.Pbkdf2(pin.Trim(), Salt, Pbkdf2Iterations, HashAlgorithmName.SHA256, 32);
 

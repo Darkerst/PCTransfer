@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Pipes;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Linq;
 using System.Text;
@@ -17,17 +15,17 @@ namespace PCTransfer11.Services;
 /// <summary>
 /// Sommige netwerkinstellingen (vast IP/DNS/gateway per adapter, de
 /// systeembrede proxy, en Wifi-wachtwoorden in klare tekst) staan in
-/// HKEY_LOCAL_MACHINE of zijn alleen met adminrechten op te vragen. De rest
-/// van PCTransfer11 draait bewust zonder adminrechten (asInvoker), dus voor
-/// alleen déze onderdelen herlanceert de app zichzelf kort, onzichtbaar en
-/// met een UAC-verzoek (via "runas") om precies dat ene commando uit te
-/// voeren. De hoofd-app wacht daarna gewoon op het resultaat.
+/// HKEY_LOCAL_MACHINE of zijn alleen met adminrechten op te vragen.
 ///
-/// De elevated (onzichtbare) instantie schrijft precies wat er gebeurde weg
-/// naar een klein statusbestand in de doel-/bronmap; de hoofd-app leest dat
-/// terug en logt het letterlijk, zodat altijd zichtbaar is of de UAC-prompt
-/// is geaccepteerd én wat daarna wel/niet is gelukt (in plaats van alleen
-/// een stille aanname op basis van de afsluitcode).
+/// Sinds het manifest op "requireAdministrator" staat, draait de hele app
+/// vrijwel altijd al met adminrechten - dan wordt hier meteen rechtstreeks
+/// uitgevoerd (<see cref="IsRunningElevated"/>), zonder er een tweede proces
+/// bij te halen. De onderstaande "zelf herlanceren met UAC (via runas)"-weg
+/// blijft alleen bestaan als vangnet voor het (zeldzame) geval dat dat toch
+/// niet zo is: de elevated (onzichtbare) herlancering schrijft dan precies
+/// wat er gebeurde weg naar een klein statusbestand in de doel-/bronmap; de
+/// hoofd-app leest dat terug en logt het letterlijk, zodat altijd zichtbaar
+/// is of de UAC-prompt is geaccepteerd én wat daarna wel/niet is gelukt.
 ///
 /// BELANGRIJK VOOR GEBRUIKSVRIENDELIJKHEID: als een actie meerdere
 /// UAC-onderdelen tegelijk nodig heeft (bv. Wifi + netwerkadapter + een
@@ -49,7 +47,6 @@ public static class ElevatedNetworkHelper
     private const string TrustFlag = "--elevated-trust";
     private const string MkdirFlag = "--elevated-mkdir";
     private const string BatchFlag = "--elevated-batch";
-    private const string SessionFlag = "--elevated-session";
     private const string StatusFileName = "_elevated_status.txt";
 
     /// <summary>Beschrijft alle mogelijke adminrechten-onderdelen voor ÉÉN gecombineerde UAC-aanvraag.</summary>
@@ -70,28 +67,16 @@ public static class ElevatedNetworkHelper
     // Aanroepen vanuit de (niet-elevated) hoofd-app
     // ---------------------------------------------------------------
 
-    // ---------------------------------------------------------------
-    // Doorlopende sessie: ÉÉN UAC-venster bij het opstarten van de app,
-    // gebruikt voor alle adminrechten-taken tijdens de rest van de sessie -
-    // in plaats van telkens opnieuw een UAC-venster tijdens het back-uppen/
-    // terugzetten. Werkt via een kortstondig, onzichtbaar elevated
-    // hulpproces dat blijft draaien en luistert op een named pipe.
-    // ---------------------------------------------------------------
-
-    private static NamedPipeClientStream? _sessionPipe;
-    private static readonly object _sessionLock = new();
-
     /// <summary>
     /// Of dit proces zelf al met adminrechten draait (bv. omdat het manifest
     /// "requireAdministrator" is, of de gebruiker de app zelf als admin
     /// startte). Zo ja, dan is de hele UAC-omleiding hieronder (zelf
-    /// herlanceren via "runas", named pipe, apart om toestemming vragen)
-    /// overbodig én overbodig risicovol (dubbele/verwarrende UAC-vensters,
-    /// een pipe-verbinding tussen twee toch-al-elevated processen die om
-    /// een andere reden kan mislukken) - dan wordt gewoon meteen
+    /// herlanceren via "runas") overbodig - dan wordt gewoon meteen
     /// rechtstreeks uitgevoerd, zonder er nog een tweede proces bij te halen.
+    /// Sinds het manifest op "requireAdministrator" staat is dit vrijwel
+    /// altijd het geval; de UAC-herlancering hieronder blijft alleen bestaan
+    /// als vangnet voor het (zeldzame) geval dat dat toch niet zo is.
     /// </summary>
-    /// <summary>Publiek zichtbare versie van <see cref="IsRunningElevated"/>, voor gebruik door de UI (bv. om de opstartvraag over te slaan).</summary>
     public static bool IsProcessElevated() => IsRunningElevated();
 
     private static bool IsRunningElevated()
@@ -106,150 +91,6 @@ public static class ElevatedNetworkHelper
         {
             return false; // bij twijfel: aannemen van niet-elevated, dan gaat de bestaande (werkende) UAC-weg gewoon door
         }
-    }
-
-    /// <summary>Of er nu een doorlopende, al geaccepteerde adminrechten-sessie actief is.</summary>
-    public static bool HasPersistentSession
-    {
-        get { lock (_sessionLock) { return _sessionPipe is { IsConnected: true }; } }
-    }
-
-    /// <summary>
-    /// Toont ÉÉN UAC-venster en start, als dat geaccepteerd wordt, een
-    /// kortstondig onzichtbaar hulpproces dat de rest van de sessie actief
-    /// blijft en via een named pipe adminrechten-taken uitvoert zonder
-    /// verdere UAC-onderbrekingen. Roep dit bv. bij het opstarten van de
-    /// app aan (of via een knop), niet per se pas wanneer een taak het
-    /// nodig heeft.
-    /// </summary>
-    public static async Task<bool> StartPersistentElevatedSessionAsync(CancellationToken ct, IProgress<string> log)
-    {
-        if (HasPersistentSession) return true;
-
-        if (IsRunningElevated())
-        {
-            log.Report("Deze app draait al met adminrechten (requireAdministrator) - een aparte sessie/UAC-venster is niet nodig.");
-            return true;
-        }
-
-        string pipeName = "PCTransfer11_session_" + Guid.NewGuid().ToString("N");
-        log.Report("Windows toont nu één UAC-venster voor de rest van deze sessie - accepteer dat venster om " +
-                    "latere UAC-onderbrekingen tijdens back-uppen/terugzetten te voorkomen ...");
-
-        Process? process;
-        try
-        {
-            string exePath = Environment.ProcessPath
-                              ?? Process.GetCurrentProcess().MainModule?.FileName
-                              ?? throw new InvalidOperationException("Kan het pad naar PCTransfer11.exe niet bepalen.");
-
-            var psi = new ProcessStartInfo
-            {
-                FileName = exePath,
-                Arguments = $"{SessionFlag} \"{pipeName}\"",
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden,
-            };
-            process = Process.Start(psi);
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED
-        {
-            log.Report("UAC-prompt geannuleerd - er wordt tijdens deze sessie per keer om adminrechten gevraagd zodra dat nodig is.");
-            return false;
-        }
-        catch (Exception ex)
-        {
-            log.Report($"Kon geen doorlopende sessie met adminrechten starten: {ex.Message}");
-            return false;
-        }
-
-        if (process == null)
-        {
-            log.Report("Kon het hulpproces niet starten.");
-            return false;
-        }
-
-        var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-        try
-        {
-            await pipe.ConnectAsync(15000, ct); // max 15s wachten tot UAC geaccepteerd is en de pipe opent
-        }
-        catch (Exception ex)
-        {
-            log.Report($"Geen adminrechten gekregen (UAC geweigerd/geannuleerd, of time-out): {ex.Message}");
-            pipe.Dispose();
-            return false;
-        }
-
-        lock (_sessionLock) { _sessionPipe = pipe; }
-        log.Report("UAC geaccepteerd - Wifi/netwerkadapter/ontbrekende mappen worden voor de rest van deze " +
-                    "sessie zonder verdere UAC-vragen verwerkt.");
-        return true;
-    }
-
-    /// <summary>Sluit de doorlopende sessie netjes af (bv. bij het afsluiten van de app).</summary>
-    public static void StopPersistentElevatedSession()
-    {
-        lock (_sessionLock)
-        {
-            if (_sessionPipe == null) return;
-            try { WriteFramed(_sessionPipe, "STOP"); } catch { /* best effort */ }
-            try { _sessionPipe.Dispose(); } catch { /* best effort */ }
-            _sessionPipe = null;
-        }
-    }
-
-    /// <summary>Stuurt een job naar de al actieve sessie en wacht op het statusresultaat.</summary>
-    private static async Task<List<string>> SendJobToSessionAsync(BatchJob job, CancellationToken ct)
-    {
-        NamedPipeClientStream? pipe;
-        lock (_sessionLock) { pipe = _sessionPipe; }
-        if (pipe is not { IsConnected: true })
-            return new List<string> { "Geen actieve sessie meer - opnieuw als losse UAC-aanvraag proberen." };
-
-        try
-        {
-            string json = JsonSerializer.Serialize(job);
-            byte[] data = Encoding.UTF8.GetBytes(json);
-            await pipe.WriteAsync(BitConverter.GetBytes(data.Length), ct);
-            await pipe.WriteAsync(data, ct);
-            await pipe.FlushAsync(ct);
-
-            byte[] lenBuf = new byte[4];
-            await pipe.ReadExactlyAsync(lenBuf, ct);
-            int len = BitConverter.ToInt32(lenBuf, 0);
-            byte[] respBuf = new byte[len];
-            await pipe.ReadExactlyAsync(respBuf, ct);
-            return JsonSerializer.Deserialize<List<string>>(Encoding.UTF8.GetString(respBuf)) ?? new List<string>();
-        }
-        catch (Exception ex)
-        {
-            lock (_sessionLock) { _sessionPipe = null; }
-            return new List<string> { $"Sessie met adminrechten is weggevallen: {ex.Message}" };
-        }
-    }
-
-    /// <summary>Schrijft een lengte-voorafgegaan UTF8-bericht (gedeeld frameformaat voor de sessie-pipe).</summary>
-    private static void WriteFramed(Stream s, string text)
-    {
-        byte[] data = Encoding.UTF8.GetBytes(text);
-        s.Write(BitConverter.GetBytes(data.Length));
-        s.Write(data);
-        s.Flush();
-    }
-
-    /// <summary>Leest een lengte-voorafgegaan UTF8-bericht, of null als de pipe gesloten is.</summary>
-    private static string? ReadFramed(Stream s)
-    {
-        byte[] lenBuf = new byte[4];
-        try { s.ReadExactly(lenBuf); }
-        catch { return null; }
-        int len = BitConverter.ToInt32(lenBuf, 0);
-        if (len <= 0 || len > 50_000_000) return null;
-        byte[] data = new byte[len];
-        s.ReadExactly(data);
-        return Encoding.UTF8.GetString(data);
     }
 
     /// <summary>
@@ -285,18 +126,6 @@ public static class ElevatedNetworkHelper
             var directStatus = new List<string>();
             ExecuteBatchJob(job, directStatus);
             foreach (string line in directStatus)
-                log.Report("    " + line);
-            return true;
-        }
-
-        log.Report(HasPersistentSession
-            ? "Sessie met adminrechten: actief - wordt via de al lopende sessie verwerkt, geen nieuwe UAC-vraag."
-            : "Sessie met adminrechten: niet actief - er wordt nu een losse UAC-aanvraag getoond.");
-
-        if (HasPersistentSession)
-        {
-            var sessionStatus = await SendJobToSessionAsync(job, ct);
-            foreach (string line in sessionStatus)
                 log.Report("    " + line);
             return true;
         }
@@ -423,15 +252,6 @@ public static class ElevatedNetworkHelper
             return true;
         }
 
-        if (HasPersistentSession)
-        {
-            var sessionStatus = await SendJobToSessionAsync(new BatchJob { Trust = true }, ct);
-            foreach (string line in sessionStatus)
-                log.Report("    " + line);
-            log.Report("Verwerkt via de al actieve sessie met adminrechten (geen nieuwe UAC-vraag nodig).");
-            return true;
-        }
-
         log.Report("Windows toont nu een UAC-venster om PCTransfer11 toe te voegen aan de vertrouwde apps " +
                     "(Controlled Folder Access + Windows Defender-uitsluitingen) - accepteer dat venster ...");
 
@@ -474,19 +294,6 @@ public static class ElevatedNetworkHelper
                 ? $"'{path}' is aangemaakt."
                 : $"Aanmaken van '{path}' is niet gelukt.");
             return directOk;
-        }
-
-        if (HasPersistentSession)
-        {
-            var sessionStatus = await SendJobToSessionAsync(
-                new BatchJob { EnsureFolders = new List<string> { path }, UserName = userName }, ct);
-            foreach (string line in sessionStatus)
-                log.Report("    " + line);
-            bool sessionOk = Directory.Exists(path);
-            log.Report(sessionOk
-                ? $"Verwerkt via de al actieve sessie met adminrechten: '{path}' is aangemaakt."
-                : $"Aanmaken van '{path}' is niet gelukt (via de actieve sessie).");
-            return sessionOk;
         }
 
         log.Report($"Windows toont nu een UAC-venster om '{path}' aan te maken en '{userName}' er volledige " +
@@ -612,11 +419,6 @@ public static class ElevatedNetworkHelper
             RunBatchWorker(args[1]);
             return true;
         }
-        if (args.Length == 2 && args[0] == SessionFlag)
-        {
-            RunPersistentSessionServer(args[1]);
-            return true;
-        }
 
         if (args.Length != 3) return false;
 
@@ -641,108 +443,6 @@ public static class ElevatedNetworkHelper
         }
         return false;
     }
-
-    /// <summary>
-    /// De elevated (onzichtbare) kant van de doorlopende sessie: blijft
-    /// draaien en luistert op de named pipe totdat de hoofd-app "STOP"
-    /// stuurt, de pipe wegvalt (bv. omdat de hoofd-app is afgesloten), of er
-    /// een onherstelbare fout optreedt. Voert ondertussen zoveel jobs uit
-    /// als de hoofd-app stuurt, zonder ooit opnieuw een UAC-venster te tonen.
-    /// </summary>
-    private static void RunPersistentSessionServer(string pipeName)
-    {
-        try
-        {
-            // BELANGRIJK: dit proces draait elevated (hoge integriteit), maar
-            // de hoofd-app draait bewust NIET elevated (medium integriteit).
-            // Windows' Mandatory Integrity Control staat standaard niet toe
-            // dat een lager-geprivilegieerd proces verbinding maakt met een
-            // pipe die door een elevated proces is aangemaakt ("access
-            // denied", geen UAC-weigering) - vandaar hieronder expliciet een
-            // lagere integriteitslabel + volledige toegang instellen via
-            // Win32 (bewust geen extra NuGet-package zoals
-            // System.IO.Pipes.AccessControl - dat past niet bij het
-            // "geen externe dependencies"-uitgangspunt van dit project).
-            using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1,
-                PipeTransmissionMode.Byte, PipeOptions.None);
-            ApplyLowIntegrityPipeSecurity(server);
-
-            // Als de hoofd-app om wat voor reden dan ook niet binnen 20s verbindt
-            // (bv. zelf al gestopt, of iets anders ging mis), moet dit
-            // onzichtbare hulpproces niet voor altijd blijven hangen.
-            using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            try
-            {
-                server.WaitForConnectionAsync(connectCts.Token).GetAwaiter().GetResult();
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
-            while (true)
-            {
-                string? jobJson = ReadFramed(server);
-                if (jobJson == null || jobJson == "STOP") break;
-
-                var status = new List<string>();
-                try
-                {
-                    var job = JsonSerializer.Deserialize<BatchJob>(jobJson);
-                    if (job != null) ExecuteBatchJob(job, status);
-                    else status.Add("Kon de ontvangen taak niet lezen.");
-                }
-                catch (Exception ex)
-                {
-                    status.Add($"Onverwachte fout: {ex.Message}");
-                }
-
-                WriteFramed(server, JsonSerializer.Serialize(status));
-            }
-        }
-        catch
-        {
-            // De sessie stopt gewoon (bv. omdat de hoofd-app is afgesloten) -
-            // de hoofd-app valt dan vanzelf terug op losse UAC-aanvragen per keer.
-        }
-    }
-
-    /// <summary>
-    /// Verlaagt het integriteitsniveau van een net aangemaakte named pipe naar
-    /// "Low", zodat een niet-elevated proces (medium integriteit) er wél
-    /// verbinding mee kan maken. Rechtstreeks via Win32 (advapi32.dll) i.p.v.
-    /// het NuGet-package "System.IO.Pipes.AccessControl", om geen extra
-    /// externe dependency toe te voegen aan dit project.
-    /// </summary>
-    private static void ApplyLowIntegrityPipeSecurity(NamedPipeServerStream pipe)
-    {
-        const int DaclSecurityInformation = 0x00000004;
-        const int LabelSecurityInformation = 0x00000010;
-        const string sddl = "D:(A;;GA;;;WD)S:(ML;;;LW)"; // Everyone: volledige toegang; label: Low (dus ook door medium/low bereikbaar)
-
-        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out IntPtr sd, out _))
-            throw new InvalidOperationException($"Kon de pipe-beveiliging niet voorbereiden (Win32-fout {Marshal.GetLastWin32Error()}).");
-
-        try
-        {
-            if (!SetKernelObjectSecurity(pipe.SafePipeHandle, DaclSecurityInformation | LabelSecurityInformation, sd))
-                throw new InvalidOperationException($"Kon de pipe-beveiliging niet toepassen (Win32-fout {Marshal.GetLastWin32Error()}).");
-        }
-        finally
-        {
-            LocalFree(sd);
-        }
-    }
-
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        string stringSecurityDescriptor, uint stringSDRevision, out IntPtr securityDescriptor, out uint securityDescriptorSize);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool SetKernelObjectSecurity(SafeHandle handle, int securityInformation, IntPtr securityDescriptor);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr LocalFree(IntPtr hMem);
 
     private static void RunBatchWorker(string jobFilePath)
     {

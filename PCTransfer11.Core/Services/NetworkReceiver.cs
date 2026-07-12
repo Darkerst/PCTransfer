@@ -123,6 +123,19 @@ public sealed class NetworkReceiver
 
             _log.Report("PIN klopt. Ontvangst gestart (versleuteld) ...");
 
+            // Protocolversie eerst (1 byte, onversleuteld) - een mismatch hier
+            // betekent dat de andere kant een oudere/nieuwere versie van de
+            // app gebruikt; dat moet meteen duidelijk mislukken in plaats van
+            // de rest van de bytes verkeerd te interpreteren.
+            byte[] versionBuffer = new byte[1];
+            await NetworkCrypto.ReadExactAsync(networkStream, versionBuffer, ct);
+            if (versionBuffer[0] != NetworkCrypto.ProtocolVersion)
+            {
+                throw new InvalidOperationException(
+                    $"De verzendende kant gebruikt een andere versie van PCTransfer11 (protocol {versionBuffer[0]}, " +
+                    $"deze app verwacht protocol {NetworkCrypto.ProtocolVersion}). Werk beide apps bij naar dezelfde versie.");
+            }
+
             // Onversleuteld toestelnaam-veldje lezen dat de verzendende kant net na de
             // PIN-check meestuurt - compatibel met de Android-kant, die ditzelfde
             // lengte-geprefixte veld verstuurt.
