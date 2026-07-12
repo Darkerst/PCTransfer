@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Bewust GEEN WinExe/UseWPF: deze bibliotheek bevat alle logica die
+         niets met de grafische interface te maken heeft (padresolutie,
+         manifest, back-up bouwen/terugzetten, netwerkprotocol, enz.), zodat
+         ze los van WPF gecompileerd én met "dotnet test" getest kan worden
+         (o.a. buiten Windows, bv. in dit ontwikkel-/CI-sandbox zonder
+         .NET-SDK-installatie op de eigen machine). Blijft wel op
+         "net8.0-windows" staan omdat een deel van de code (registry,
+         netsh/reg.exe, UAC-herlancering) inherent Windows-specifiek is - dat
+         hoeft geen WPF te zijn om toch gecompileerd te worden. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>PCTransfer11</RootNamespace>
+    <AssemblyName>PCTransfer11.Core</AssemblyName>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,44 @@
+<Window x:Class="PCTransfer11.CrashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PCTransfer11 - Onverwachte fout"
+        Height="520" Width="720"
+        WindowStartupLocation="CenterScreen"
+        Background="#F3F3F3">
+    <!-- Bewust GEEN afhankelijkheid van App.xaml-resources: dit venster moet ook
+         nog gewoon werken als het probleem juist in het laden van die resources zat. -->
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="PCTransfer11 is tegen een onverwachte fout aangelopen"
+                   FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1" Margin="0,0,0,12" TextWrapping="Wrap" Foreground="#616161"
+                   Text="Kopieer onderstaande foutmelding en stuur die door, dan kan het probleem opgelost worden. Het bestand hieronder is ook automatisch opgeslagen op schijf."/>
+
+        <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="1" Background="White" CornerRadius="4">
+            <TextBox x:Name="CrashDetailsTextBox"
+                     IsReadOnly="True"
+                     TextWrapping="NoWrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     FontFamily="Consolas"
+                     FontSize="12"
+                     Padding="10"
+                     BorderThickness="0"
+                     Background="Transparent"/>
+        </Border>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <TextBlock x:Name="SavedPathText" Foreground="#616161" VerticalAlignment="Center"
+                       Margin="0,0,16,0" TextWrapping="Wrap"/>
+            <Button x:Name="CopyButton" Content="Kopiëren" Padding="16,8" Margin="0,0,8,0" Click="CopyButton_Click"/>
+            <Button x:Name="CloseButton" Content="Sluiten" Padding="16,8" Click="CloseButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

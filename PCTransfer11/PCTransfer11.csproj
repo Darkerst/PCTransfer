@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PCTransfer11</AssemblyName>
+    <RootNamespace>PCTransfer11</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <Version>1.2.0.0</Version>
+    <Company>Darkerst Inc.</Company>
+    <Product>PCTransfer11</Product>
+    <Copyright>© Darkerst Inc.</Copyright>
+    <!-- Geen enkele externe NuGet-package vereist: alles gebruikt de
+         ingebouwde .NET/WPF-bibliotheken, zodat dit project zonder
+         internetverbinding compileert zodra de .NET SDK is geïnstalleerd. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ook als Resource meegenomen (naast ApplicationIcon hierboven) zodat
+         de About-tab het icoon via een relatieve pack-URI kan tonen. -->
+    <Resource Include="icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Alle niet-WPF-logica (Models, back-up bouwen/terugzetten, netwerk,
+         registry/UAC-helpers) staat in dit losse project, zodat die ook
+         zonder WPF gecompileerd en met dotnet test getest kan worden. -->
+    <ProjectReference Include="..\PCTransfer11.Core\PCTransfer11.Core.csproj" />
+  </ItemGroup>
+
+</Project>

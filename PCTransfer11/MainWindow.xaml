@@ -1,0 +1,293 @@
+<Window x:Class="PCTransfer11.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PCTransfer11" Height="800" Width="1180" MinHeight="600" MinWidth="900"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="PCTransfer11" Style="{StaticResource HeaderText}"/>
+            <TextBlock Text="Zet bestanden en programma-instellingen over naar een andere Windows-pc."
+                       Style="{StaticResource SubtleText}" Margin="0"/>
+        </StackPanel>
+
+        <TabControl x:Name="MainTabControl" Grid.Row="1" BorderThickness="0" Background="Transparent">
+
+            <!-- ================= TAB 1: SELECTEREN ================= -->
+            <TabItem Header="1. Selecteren">
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="1.3*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Linkerkolom: bestanden en mappen -->
+                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                        <Border Style="{StaticResource CardBorder}">
+                            <StackPanel>
+                                <TextBlock Text="Bestanden en mappen" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <TextBlock Style="{StaticResource SubtleText}"
+                                           Text="Alleen van je eigen gebruikersaccount - niet van het openbare/gedeelde Windows-profiel."/>
+                                <ItemsControl x:Name="FilesItemsControl">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding DisplayName}"
+                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      IsEnabled="{Binding Exists}"
+                                                      ToolTip="{Binding Path}"
+                                                      Margin="0,4"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Content="+ Aangepaste map toevoegen ..." Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left" Margin="0,8,0,0" Click="AddCustomFolder_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </ScrollViewer>
+
+                    <!-- Rechterkolom: programma- en Windows-instellingen, gegroepeerd -->
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                        <Border Style="{StaticResource CardBorder}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Programma- en Windows-instellingen" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Button Content="Alles" Style="{StaticResource SecondaryButton}" Padding="10,4"
+                                                Margin="0,0,6,0" Click="AppsSelectAll_Click"/>
+                                        <Button Content="Niets" Style="{StaticResource SecondaryButton}" Padding="10,4"
+                                                Click="AppsSelectNone_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Style="{StaticResource SubtleText}"
+                                           Text="Alleen items die op dit systeem gevonden zijn kunnen worden aangevinkt. Wachtwoorden die in browsers zijn opgeslagen gaan nooit mee (die zijn versleuteld aan dit Windows-account gekoppeld). Windows-instellingen gaan alleen via je eigen gebruikersaccount (HKEY_CURRENT_USER) - er wordt nooit het volledige register gebackupt."/>
+                                <ItemsControl x:Name="AppsItemsControl">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      IsEnabled="{Binding IsAvailable}"
+                                                      ToolTip="{Binding Note}"
+                                                      Margin="16,4,0,4">
+                                                <TextBlock Text="{Binding DisplayName}"/>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                    <ItemsControl.GroupStyle>
+                                        <GroupStyle>
+                                            <GroupStyle.HeaderTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource AccentBrush}"
+                                                               Margin="0,14,0,2"/>
+                                                </DataTemplate>
+                                            </GroupStyle.HeaderTemplate>
+                                        </GroupStyle>
+                                    </ItemsControl.GroupStyle>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- ================= TAB 2: OVERZETTEN ================= -->
+            <TabItem Header="2. Overzetten">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+                <StackPanel>
+
+                    <Border Style="{StaticResource CardBorder}">
+                        <StackPanel>
+                            <TextBlock Text="Hoe wil je overzetten?" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <RadioButton x:Name="ModeNetworkRadio" GroupName="Mode" Content="Rechtstreeks via het netwerk (beide pc's tegelijk aan)"
+                                         IsChecked="True" Margin="0,4" Checked="ModeRadio_Changed"/>
+                            <RadioButton x:Name="ModeBackupRadio" GroupName="Mode" Content="Via een back-upmap (USB-stick / externe schijf)"
+                                         Margin="0,4" Checked="ModeRadio_Changed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Netwerkmodus -->
+                    <Border x:Name="NetworkPanel" Style="{StaticResource CardBorder}">
+                        <StackPanel>
+                            <TextBlock Text="Netwerkoverdracht" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <RadioButton x:Name="RoleReceiverRadio" GroupName="Role" Content="Deze pc is de ontvanger"
+                                         IsChecked="True" Margin="0,4" Checked="RoleRadio_Changed"/>
+                            <RadioButton x:Name="RoleSenderRadio" GroupName="Role" Content="Deze pc is de verzender"
+                                         Margin="0,4" Checked="RoleRadio_Changed"/>
+
+                            <!-- Ontvanger -->
+                            <StackPanel x:Name="ReceiverPanel" Margin="0,12,0,0">
+                                <TextBlock x:Name="ReceiverInfoText" Style="{StaticResource SubtleText}"/>
+                                <TextBlock Text="Naam voor deze overdracht (wordt automatisch voorgesteld zodra de zendende kant verbindt - pas gerust aan, bv. 'Samsung Android Z Flip 7'):"
+                                           Style="{StaticResource SubtleText}" Margin="0,8,0,4" TextWrapping="Wrap"/>
+                                <TextBox x:Name="ReceiveLabelTextBox" Width="260" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <Button Content="Start ontvangen" Style="{StaticResource AccentButton}"
+                                        HorizontalAlignment="Left" Margin="0,0,0,8" Click="StartReceive_Click"/>
+                                <TextBlock x:Name="ReceivePinText" FontWeight="Bold" FontSize="18"
+                                           Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" Margin="0,0,0,4"/>
+                                <TextBlock Text="Geef deze PIN door aan de verzendende pc (beveiligt de overdracht tegen andere apparaten op hetzelfde netwerk)."
+                                           x:Name="ReceivePinHintText" Style="{StaticResource SubtleText}" Visibility="Collapsed"/>
+                            </StackPanel>
+
+                            <!-- Zender -->
+                            <StackPanel x:Name="SenderPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                                <Button Content="Zoek pc's op het netwerk" Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left" Margin="0,0,0,8" Click="DiscoverReceivers_Click"/>
+                                <ComboBox x:Name="ReceiversComboBox" Margin="0,0,0,8" MinWidth="300" HorizontalAlignment="Left"/>
+                                <TextBlock Text="Of vul handmatig een IP-adres in:" Style="{StaticResource SubtleText}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="ManualIpTextBox" Width="220" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <TextBlock Text="PIN die op de ontvangende pc getoond wordt:" Style="{StaticResource SubtleText}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="SendPinTextBox" Width="120" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <Button Content="Start verzenden" Style="{StaticResource AccentButton}"
+                                        HorizontalAlignment="Left" Click="StartSend_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Back-upmap-modus -->
+                    <Border x:Name="BackupPanel" Style="{StaticResource CardBorder}" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Back-up maken" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Maakt een back-up van alles wat je op tabblad '1. Selecteren' hebt aangevinkt. Kies hieronder eerst een locatie (bv. een USB-stick of externe schijf) - daar komt een nieuwe map met de back-up in te staan, die je daarna direct in Verkenner kan openen, bekijken en bewerken."
+                                       Style="{StaticResource SubtleText}"/>
+                            <Button Content="Locatie kiezen en back-up maken ..." Style="{StaticResource AccentButton}"
+                                    HorizontalAlignment="Left" Margin="0,0,0,4" Click="CreateBackup_Click"/>
+                            <CheckBox x:Name="EncryptBackupCheckBox" Content="Back-up versleutelen met een wachtwoord (aanbevolen als Wifi-wachtwoorden zijn meegenomen)"
+                                      Margin="0,10,0,4" Checked="EncryptBackupCheckBox_Changed" Unchecked="EncryptBackupCheckBox_Changed"/>
+                            <PasswordBox x:Name="BackupPasswordBox" Padding="6" Width="260" HorizontalAlignment="Left"
+                                         Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}">
+                        <StackPanel>
+                            <TextBlock Text="Back-up terugzetten" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Kies een eerder gemaakte back-upmap en selecteer welke onderdelen je op deze pc wilt terugzetten."
+                                       Style="{StaticResource SubtleText}"/>
+                            <Button Content="Back-upmap kiezen ..." Style="{StaticResource SecondaryButton}"
+                                    HorizontalAlignment="Left" Margin="0,0,0,8" Click="ChooseBackupFolder_Click"/>
+                            <Button Content="Versleuteld back-upbestand kiezen (.pcte) ..." Style="{StaticResource SecondaryButton}"
+                                    HorizontalAlignment="Left" Margin="0,0,0,8" Click="ChooseEncryptedBackup_Click"/>
+                            <TextBlock x:Name="SelectedBackupFolderText" Style="{StaticResource SubtleText}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                            <StackPanel x:Name="RestoreSelectionPanel" Visibility="Collapsed">
+                                <TextBlock Text="Wat wil je terugzetten?" Margin="0,4,0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Button Content="Alles" Style="{StaticResource SecondaryButton}"
+                                            Margin="0,0,8,0" Click="RestoreSelectAll_Click"/>
+                                    <Button Content="Niets" Style="{StaticResource SecondaryButton}"
+                                            Click="RestoreSelectNone_Click"/>
+                                </StackPanel>
+                                <Border BorderThickness="1" BorderBrush="#33FFFFFF" CornerRadius="4" Padding="8" MaxHeight="240">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl x:Name="RestoreItemsControl">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Content="{Binding DisplayName}"
+                                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                              Margin="0,4"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                                <Button Content="Geselecteerde items terugzetten" Style="{StaticResource AccentButton}"
+                                        HorizontalAlignment="Left" Margin="0,12,0,0" Click="RestoreSelected_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= TAB 3: VOORTGANG ================= -->
+            <TabItem Header="3. Voortgang">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ProgressBar x:Name="TransferProgressBar" Grid.Column="0" Minimum="0" Maximum="1" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="ProgressPercentText" Grid.Column="1" Text="0%" Width="44"
+                                   TextAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <Button x:Name="OpenLogFolderButton" Grid.Column="2" Content="Logboekmap openen"
+                                Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="OpenLogFolder_Click"/>
+                        <Button x:Name="StopButton" Grid.Column="3" Content="Stop" Style="{StaticResource SecondaryButton}"
+                                Margin="8,0,0,0" IsEnabled="False" Click="StopButton_Click"/>
+                    </Grid>
+                    <TextBlock x:Name="CurrentFileText" Grid.Row="1" Margin="0,0,0,4"
+                               Style="{StaticResource SubtleText}" TextTrimming="CharacterEllipsis"/>
+                    <Button x:Name="OpenExtractedFolderButton" Grid.Row="2" Content="Map met uitgepakte bestanden openen"
+                            Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                            Visibility="Collapsed" Click="OpenExtractedFolder_Click"/>
+                    <Border Grid.Row="3" Style="{StaticResource CardBorder}" Padding="0">
+                        <TextBox x:Name="LogTextBox" IsReadOnly="True" BorderThickness="0"
+                                 TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas" Padding="12" Background="Transparent"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ================= TAB 4: OVER ================= -->
+            <TabItem Header="Over">
+                <StackPanel Margin="0,12,0,0" HorizontalAlignment="Left" MaxWidth="560">
+                    <Border Style="{StaticResource CardBorder}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <Image Source="icon.ico" Width="40" Height="40" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="PCTransfer11" Style="{StaticResource HeaderText}" Margin="0"/>
+                                    <TextBlock x:Name="AboutVersionText" Style="{StaticResource SubtleText}" Margin="0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="Zet bestanden, programma-instellingen en persoonlijke Windows-instellingen over naar een andere pc - via het netwerk of via een back-upmap."
+                                       Style="{StaticResource SubtleText}" Margin="0,12,0,12" TextWrapping="Wrap"/>
+
+                            <TextBlock Margin="0,0,0,2">
+                                <Run Text="Eigenaar: " FontWeight="SemiBold"/>
+                                <Run Text="Darkerst Inc."/>
+                            </TextBlock>
+                            <TextBlock Text="© Darkerst Inc. Alle rechten voorbehouden." Style="{StaticResource SubtleText}" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Deze software wordt geleverd zonder enige garantie. Gebruik op eigen risico."
+                                       Style="{StaticResource SubtleText}" Margin="0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardBorder}">
+                        <StackPanel>
+                            <TextBlock Text="Windows laten vertrouwen" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource SubtleText}" Margin="0,0,0,10">
+                                <Run Text="Windows kan bij het terugzetten 'Access denied' geven op Documenten/Afbeeldingen/Bureaublad/Video's/Muziek. Dat is meestal Controlled Folder Access (Ransomware-bescherming) - een ANDERE lijst dan de gewone virusscanner-uitsluitingen. Deze knop voegt PCTransfer11.exe zelf toe aan beide lijsten (via een UAC-venster)."/>
+                            </TextBlock>
+                            <Button Content="PCTransfer11 toevoegen aan Windows' vertrouwde apps ..."
+                                    Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"
+                                    Click="TrustApp_Click"/>
+                            <TextBlock Text="Let op: dit lost het 'Onbekende uitgever'-schildje in het UAC-venster zelf niet op - dat vereist een echt code-signing-certificaat op de .exe."
+                                       Style="{StaticResource SubtleText}" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </TabItem>
+
+        </TabControl>
+    </Grid>
+</Window>
