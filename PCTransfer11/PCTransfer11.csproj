@@ -30,6 +30,9 @@
          registry/UAC-helpers) staat in dit losse project, zodat die ook
          zonder WPF gecompileerd en met dotnet test getest kan worden. -->
     <ProjectReference Include="..\PCTransfer11.Core\PCTransfer11.Core.csproj" />
+    <!-- ZXing.Net: correcte QR-code generatie voor het PIN-venster.
+         Open-source (Apache 2.0), geen externe server, puur lokaal. -->
+    <PackageReference Include="ZXing.Net" Version="0.16.9" />
   </ItemGroup>
 
 </Project>
