@@ -507,6 +507,13 @@ public partial class MainWindow : Window
             var builder = new PackageBuilder(_logProgress);
             var checkedFiles = GetCheckedFiles().ToList();
             var checkedApps = GetCheckedApps().ToList();
+
+            if (!await ConfirmRunningAppsClosedAsync(checkedApps, ct))
+            {
+                Log("Verzending geannuleerd (nog openstaande programma's).");
+                return;
+            }
+
             var buildProgress = new Progress<double>(p => ((IProgress<double>)_percentProgress).Report(p * 0.5));
             await Task.Run(() => builder.BuildToZipAsync(checkedFiles, checkedApps, tempPackagePath, buildProgress, ct, _currentFileProgress), ct);
 
@@ -536,6 +543,78 @@ public partial class MainWindow : Window
         BackupPasswordBox.Visibility = EncryptBackupCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Controleert of een van de geselecteerde apps nog draait (en dus eigen
+    /// bestanden vergrendelt, zoals de History/Cookies van een browser -
+    /// exact het probleem dat anders leidt tot een reeks "Overgeslagen (in
+    /// gebruik door andere app)"-regels in het logboek). Biedt aan om ze
+    /// automatisch te sluiten vóór de actie start.
+    /// </summary>
+    /// <returns>False als de gebruiker de hele actie wil annuleren.</returns>
+    private async Task<bool> ConfirmRunningAppsClosedAsync(IEnumerable<AppProfile> checkedApps, CancellationToken ct)
+    {
+        var runningApps = new List<(AppProfile App, List<Process> Processes)>();
+        foreach (var app in checkedApps)
+        {
+            if (app.RelatedProcessNames == null) continue;
+            var procs = app.RelatedProcessNames.SelectMany(name => Process.GetProcessesByName(name)).ToList();
+            if (procs.Count > 0)
+                runningApps.Add((app, procs));
+        }
+
+        if (runningApps.Count == 0) return true;
+
+        string names = string.Join(", ", runningApps.Select(r => r.App.DisplayName));
+        var result = MessageBox.Show(
+            $"De volgende programma's staan nog open, waardoor sommige bestanden (bv. geschiedenis, wachtwoorden, " +
+            $"cookies) vergrendeld zijn en niet volledig meegenomen kunnen worden:\n\n{names}\n\n" +
+            "Ja = nu automatisch afsluiten en doorgaan\n" +
+            "Nee = doorgaan zonder af te sluiten (deze onderdelen blijven dan onvolledig)\n" +
+            "Annuleren = actie nu niet starten",
+            "PCTransfer11 - Programma's staan nog open",
+            MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Cancel) return false;
+        if (result != MessageBoxResult.Yes) return true; // doorgaan zonder te sluiten
+
+        foreach (var (app, procs) in runningApps)
+        {
+            foreach (var proc in procs)
+            {
+                try
+                {
+                    Log($"{app.DisplayName} wordt afgesloten (proces {proc.ProcessName}, PID {proc.Id}) ...");
+                    proc.CloseMainWindow();
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(TimeSpan.FromSeconds(3));
+                    try
+                    {
+                        await proc.WaitForExitAsync(timeoutCts.Token);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        // Sloot niet netjes binnen 3s vanzelf af (bv. "wijzigingen opslaan?"-dialoog) - geforceerd stoppen.
+                        proc.Kill(entireProcessTree: true);
+                        await proc.WaitForExitAsync(ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"Kon {app.DisplayName} niet afsluiten: {ex.Message}");
+                }
+                finally
+                {
+                    proc.Dispose();
+                }
+            }
+        }
+
+        // Even wachten tot Windows de bestandslocks écht heeft vrijgegeven na het sluiten.
+        await Task.Delay(1000, ct);
+        Log("Openstaande programma's afgesloten - actie gaat verder.");
+        return true;
+    }
+
     private async void CreateBackup_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFolderDialog { Title = "Kies waar de back-upmap moet komen" };
@@ -558,6 +637,12 @@ public partial class MainWindow : Window
             var builder = new PackageBuilder(_logProgress);
             var checkedFiles = GetCheckedFiles().ToList();
             var checkedApps = GetCheckedApps().ToList();
+
+            if (!await ConfirmRunningAppsClosedAsync(checkedApps, ct))
+            {
+                Log("Back-up geannuleerd (nog openstaande programma's).");
+                return;
+            }
 
             if (!encrypt)
             {

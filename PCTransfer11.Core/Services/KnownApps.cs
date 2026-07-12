@@ -31,6 +31,7 @@ public static class KnownApps
                     var path = Path.Combine(localAppData, "Google", "Chrome", "User Data", "Default");
                     return Directory.Exists(path) ? path : null;
                 },
+                RelatedProcessNames = new[] { "chrome" },
                 Note = "Bladwijzers en voorkeuren. Opgeslagen wachtwoorden gaan NIET mee " +
                        "(die zijn versleuteld aan dit Windows-account gekoppeld)."
             },
@@ -44,6 +45,7 @@ public static class KnownApps
                     var path = Path.Combine(localAppData, "Microsoft", "Edge", "User Data", "Default");
                     return Directory.Exists(path) ? path : null;
                 },
+                RelatedProcessNames = new[] { "msedge" },
                 Note = "Bladwijzers en voorkeuren. Opgeslagen wachtwoorden gaan NIET mee."
             },
             new AppProfile
@@ -60,6 +62,7 @@ public static class KnownApps
                     var preferred = dirs.FirstOrDefault(d => d.EndsWith(".default-release", StringComparison.OrdinalIgnoreCase));
                     return preferred ?? dirs.FirstOrDefault();
                 },
+                RelatedProcessNames = new[] { "firefox" },
                 Note = "Bladwijzers, geschiedenis en voorkeuren van het standaardprofiel."
             },
             new AppProfile
@@ -72,6 +75,7 @@ public static class KnownApps
                     var path = Path.Combine(roamingAppData, "Opera Software", "Opera Stable");
                     return Directory.Exists(path) ? path : null;
                 },
+                RelatedProcessNames = new[] { "opera" },
                 Note = "Bladwijzers en voorkeuren. Opgeslagen wachtwoorden gaan NIET mee."
             },
             new AppProfile
@@ -102,6 +106,7 @@ public static class KnownApps
                     var preferred = dirs.FirstOrDefault(d => d.EndsWith(".default-release", StringComparison.OrdinalIgnoreCase));
                     return preferred ?? dirs.FirstOrDefault();
                 },
+                RelatedProcessNames = new[] { "thunderbird" },
                 Note = "Volledig profiel: e-mails, accounts, adresboek, filters en instellingen. Kan groot zijn " +
                        "als er veel lokaal opgeslagen e-mail is."
             },
@@ -116,6 +121,7 @@ public static class KnownApps
                     var path = Path.Combine(localAppData, "Microsoft", "Outlook");
                     return Directory.Exists(path) ? path : null;
                 },
+                RelatedProcessNames = new[] { "OUTLOOK" },
                 Note = "Let op: .ost-bestanden zijn alleen een lokale cache van een online postvak (Exchange/" +
                        "Microsoft 365) en worden na terugzetten toch opnieuw gedownload door Outlook - die nemen " +
                        "onnodig ruimte in maar zijn verder onschadelijk. Een .pst-bestand (bv. een lokaal " +
@@ -132,6 +138,7 @@ public static class KnownApps
                     var path = Path.Combine(roamingAppData, "Microsoft", "Skype for Desktop");
                     return Directory.Exists(path) ? path : null;
                 },
+                RelatedProcessNames = new[] { "Skype" },
                 Note = "Lokale chatgeschiedenis en instellingen van de huidige Skype-app. " +
                        "(MSN Messenger en AIM bestaan al jaren niet meer en hebben dus niets om over te zetten.)"
             },

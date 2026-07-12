@@ -52,6 +52,16 @@ public sealed class AppProfile
     public Func<string, CancellationToken, IProgress<string>, Task>? CustomImport { get; init; }
 
     /// <summary>
+    /// Procesnaam(en) (zonder ".exe") die dit onderdeel op slot kunnen zetten
+    /// terwijl ze draaien - bv. een browser die zijn eigen History/Cookies-
+    /// bestand vergrendelt. Vóór een back-up wordt gecontroleerd of zo'n
+    /// proces nog draait, zodat de gebruiker de kans krijgt het eerst af te
+    /// sluiten in plaats van dat cruciale bestanden stilletjes "in gebruik
+    /// door andere app" worden overgeslagen.
+    /// </summary>
+    public string[]? RelatedProcessNames { get; init; }
+
+    /// <summary>
     /// True als dit onderdeel een UAC-adminrechten-prompt laat zien zodra het
     /// wordt meegenomen. Zulke items staan bewust NIET standaard aangevinkt
     /// (in tegenstelling tot de rest), zodat een gebruiker nooit onverwacht
