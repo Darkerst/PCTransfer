@@ -170,9 +170,34 @@ public partial class MainWindow : Window
         CollectionViewSource.GetDefaultView(_appProfiles).Refresh();
     }
 
-    /// <summary>Herkent aan manifest.ToolVersion of een back-up van de Android- of de Windows-versie komt.</summary>
+    /// <summary>
+    /// Herkent of een back-up van de Android- of de Windows-versie komt.
+    /// Combineert twee methoden zodat ook oudere Android-back-ups (zonder
+    /// "-android" in ToolVersion) correct worden herkend:
+    /// 1. ToolVersion bevat "android" → zeker Android
+    /// 2. CreatedByMachine lijkt op een Android-toestelmodel (bv. "SM-F766B",
+    ///    "Pixel 9", "OnePlus 12") → waarschijnlijk Android
+    /// Windows-hostnamen zijn doorgaans alfanumeriek zonder streepjes+letters
+    /// patroon van toestelmodellen (SM-XXXX, Pixel N, enz.).
+    /// </summary>
+    private static bool IsAndroidOrigin(PackageManifest manifest)
+    {
+        if (manifest.ToolVersion.Contains("android", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Heuristiek op basis van toestelnaam-patronen die typisch zijn voor
+        // Android-fabrikanten maar nooit voorkomen als Windows-hostnaam.
+        string machine = manifest.CreatedByMachine ?? "";
+        string[] androidPrefixes = { "SM-", "Pixel ", "OnePlus ", "POCO ", "Redmi ", "Mi ", "realme ", "OPPO ", "vivo ", "Xperia ", "motorola ", "Nokia ", "ROG Phone", "Fairphone" };
+        foreach (string prefix in androidPrefixes)
+            if (machine.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+        return false;
+    }
+
     private static string DescribeOrigin(PackageManifest manifest) =>
-        manifest.ToolVersion.Contains("android", StringComparison.OrdinalIgnoreCase)
+        IsAndroidOrigin(manifest)
             ? $"een Android-toestel ('{manifest.CreatedByMachine}')"
             : $"een Windows-pc ('{manifest.CreatedByMachine}')";
 
@@ -380,7 +405,7 @@ public partial class MainWindow : Window
             try
             {
                 var peekManifest = PackageRestorer.ReadManifestFromZip(savedPackagePath);
-                isWindowsSourced = !peekManifest.ToolVersion.Contains("android", StringComparison.OrdinalIgnoreCase);
+                isWindowsSourced = !IsAndroidOrigin(peekManifest);
                 Log($"Herkomst: {DescribeOrigin(peekManifest)}.");
             }
             catch (Exception ex)
