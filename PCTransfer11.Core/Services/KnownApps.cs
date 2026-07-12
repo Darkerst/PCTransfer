@@ -320,6 +320,114 @@ public static class KnownApps
                        "klare tekst te kunnen meenemen. Weiger je de UAC-prompt, dan gaan alleen de netwerknaam en " +
                        "het beveiligingstype mee (zonder wachtwoord) - dat lukt namelijk wel zonder adminrechten."
             },
+
+            // ---------------- Ontwikkeling & tools ----------------
+            new AppProfile
+            {
+                Id = "vscode",
+                DisplayName = "Visual Studio Code (instellingen, keybindings, snippets)",
+                Category = "Ontwikkeling & tools",
+                ResolveDataFolder = () =>
+                {
+                    var path = Path.Combine(localAppData, "Code", "User");
+                    return Directory.Exists(path) ? path : null;
+                },
+                RelatedProcessNames = new[] { "Code" },
+                Note = "Instellingen, sneltoetsen en snippets. Extensies gaan niet mee maar worden opnieuw geïnstalleerd via Settings Sync."
+            },
+            new AppProfile
+            {
+                Id = "notepadplusplus",
+                DisplayName = "Notepad++ (instellingen, sneltoetsen, stijlen)",
+                Category = "Ontwikkeling & tools",
+                ResolveDataFolder = () =>
+                {
+                    var path = Path.Combine(roamingAppData, "Notepad++");
+                    return Directory.Exists(path) ? path : null;
+                },
+                RelatedProcessNames = new[] { "notepad++" },
+                Note = "config.xml, shortcuts.xml, stylers.xml en pluginConfig. Installeer Notepad++ eerst opnieuw."
+            },
+            new AppProfile
+            {
+                Id = "7zip",
+                DisplayName = "7-Zip (instellingen)",
+                Category = "Ontwikkeling & tools",
+                ResolveDataFolder = () => null,
+                RegistryKeys = new[] { @"HKEY_CURRENT_USER\Software\7-Zip" },
+                Note = "7-Zip slaat instellingen op in het register."
+            },
+            new AppProfile
+            {
+                Id = "winrar",
+                DisplayName = "WinRAR (instellingen, thema's)",
+                Category = "Ontwikkeling & tools",
+                ResolveDataFolder = () =>
+                {
+                    var path = Path.Combine(roamingAppData, "WinRAR");
+                    return Directory.Exists(path) ? path : null;
+                },
+                RegistryKeys = new[] { @"HKEY_CURRENT_USER\Software\WinRAR" },
+                Note = "Instellingen en thema's. Licentie gaat NIET mee."
+            },
+            // ---------------- Games ----------------
+            new AppProfile
+            {
+                Id = "steam",
+                DisplayName = "Steam (game-saves, lokale gebruikersdata)",
+                Category = "Games",
+                ResolveDataFolder = () =>
+                {
+                    var roaming = Path.Combine(roamingAppData, "Steam");
+                    if (Directory.Exists(roaming)) return roaming;
+                    var pf = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steam", "userdata");
+                    return Directory.Exists(pf) ? pf : null;
+                },
+                RelatedProcessNames = new[] { "steam", "steamwebhelper" },
+                Note = "Lokale game-saves. Games zelf moeten opnieuw worden gedownload. Kan groot zijn."
+            },
+            // ---------------- Communicatie (extra) ----------------
+            new AppProfile
+            {
+                Id = "discord",
+                DisplayName = "Discord (instellingen, sneltoetsen)",
+                Category = "Communicatie & e-mail",
+                ResolveDataFolder = () =>
+                {
+                    var path = Path.Combine(roamingAppData, "discord");
+                    return Directory.Exists(path) ? path : null;
+                },
+                RelatedProcessNames = new[] { "Discord" },
+                Note = "Lokale instellingen. Account/servers zijn in de cloud opgeslagen."
+            },
+            new AppProfile
+            {
+                Id = "whatsapp_win",
+                DisplayName = "WhatsApp voor Windows (lokale cache)",
+                Category = "Communicatie & e-mail",
+                ResolveDataFolder = () =>
+                {
+                    var ms = Path.Combine(localAppData, "Packages", "5319275A.WhatsAppDesktop_cv1g1gvanyjgm", "LocalState");
+                    if (Directory.Exists(ms)) return ms;
+                    var classic = Path.Combine(roamingAppData, "WhatsApp");
+                    return Directory.Exists(classic) ? classic : null;
+                },
+                RelatedProcessNames = new[] { "WhatsApp" },
+                Note = "Lokale cache van de Windows-app."
+            },
+            // ---------------- Multimedia ----------------
+            new AppProfile
+            {
+                Id = "vlc",
+                DisplayName = "VLC mediaspeler (instellingen, afspeellijsten)",
+                Category = "Multimedia & downloads",
+                ResolveDataFolder = () =>
+                {
+                    var path = Path.Combine(roamingAppData, "vlc");
+                    return Directory.Exists(path) ? path : null;
+                },
+                Note = "VLC-instellingen (vlcrc) en afspeellijsten."
+            },
         };
     }
 }

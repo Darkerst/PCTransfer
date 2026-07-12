@@ -132,6 +132,9 @@
                                         HorizontalAlignment="Left" Margin="0,0,0,8" Click="StartReceive_Click"/>
                                 <TextBlock x:Name="ReceivePinText" FontWeight="Bold" FontSize="18"
                                            Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" Margin="0,0,0,4"/>
+                                <Button x:Name="ShowQrCodeButton" Content="Toon als QR-code" Visibility="Collapsed"
+                                        Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"
+                                        Margin="0,0,0,4" Click="ShowQrCode_Click"/>
                                 <TextBlock Text="Geef deze PIN door aan de verzendende pc (beveiligt de overdracht tegen andere apparaten op hetzelfde netwerk)."
                                            x:Name="ReceivePinHintText" Style="{StaticResource SubtleText}" Visibility="Collapsed"/>
                             </StackPanel>

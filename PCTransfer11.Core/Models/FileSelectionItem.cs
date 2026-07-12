@@ -27,6 +27,39 @@ public sealed class FileSelectionItem
     /// </summary>
     public string? KnownFolderId { get; set; }
 
+    /// <summary>
+    /// Optionele uitsluitingspatronen per map (bv. "node_modules", "*.tmp", ".git").
+    /// Wildcards: * = elk teken, ? = één teken.
+    /// </summary>
+    public string[]? ExcludePatterns { get; set; }
+
+    public bool IsExcluded(string fileOrFolderName)
+    {
+        if (ExcludePatterns == null || ExcludePatterns.Length == 0) return false;
+        string name = System.IO.Path.GetFileName(fileOrFolderName);
+        foreach (string pattern in ExcludePatterns)
+            if (GlobMatch(name, pattern, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private static bool GlobMatch(string str, string pattern, StringComparison cmp)
+    {
+        if (pattern == "*") return true;
+        int s = 0, p = 0, starS = -1, starP = -1;
+        while (s < str.Length)
+        {
+            if (p < pattern.Length && (pattern[p] == '?' || string.Compare(str, s, pattern, p, 1, cmp) == 0))
+            { s++; p++; }
+            else if (p < pattern.Length && pattern[p] == '*')
+            { starP = p++; starS = s; }
+            else if (starP >= 0)
+            { p = starP + 1; s = ++starS; }
+            else return false;
+        }
+        while (p < pattern.Length && pattern[p] == '*') p++;
+        return p == pattern.Length;
+    }
+
     public static FileSelectionItem ForSpecialFolder(string displayName, Environment.SpecialFolder folder)
     {
         return new FileSelectionItem

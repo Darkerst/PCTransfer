@@ -69,7 +69,10 @@ public sealed class PackageBuilder
         string outputDirectory,
         IProgress<double>? percentProgress,
         CancellationToken ct,
-        IProgress<string>? currentFileProgress = null)
+        IProgress<string>? currentFileProgress = null,
+        bool useVss = true,
+        bool differentialMode = false,
+        string? previousBackupDirectory = null)
     {
         var filesList = selectedFiles.Where(f => f.Exists).ToList();
         var appsList = selectedApps.ToList();
@@ -120,6 +123,19 @@ public sealed class PackageBuilder
 
         CheckFreeDiskSpace(outputDirectory, totalBytes);
 
+        // VSS-snapshot aanmaken zodat open bestanden (bv. Edge/Outlook) gewoon gekopieerd worden.
+        using var vssSession = useVss ? new VssSessionManager(_log) : null;
+
+        // Differentiële modus: alleen gewijzigde bestanden meenemen.
+        BackupHistory.BackupIndex? previousIndex = null;
+        if (differentialMode && previousBackupDirectory != null)
+        {
+            previousIndex = BackupHistory.LoadLatestIndex(previousBackupDirectory);
+            _log.Report(previousIndex != null
+                ? $"Differentiële back-up: vorige index gevonden van {previousIndex.CreatedAtUtc:g} UTC - alleen gewijzigde bestanden worden meegenomen."
+                : "Differentiële back-up: geen vorige index gevonden - volledige back-up wordt gemaakt.");
+        }
+
         var tracker = new ByteProgressTracker(totalBytes, percentProgress, currentFileProgress);
 
         var manifest = new PackageManifest();
@@ -136,10 +152,11 @@ public sealed class PackageBuilder
             string destination = Path.Combine(outputDirectory, safeName);
 
             _log.Report($"Bestanden kopiëren: {item.DisplayName} ...");
-            if (Directory.Exists(item.Path))
-                await CopyDirectoryAsync(item.Path, destination, tracker, ct);
+            string sourcePath = vssSession?.TranslateToSnapshotPath(item.Path) ?? item.Path;
+            if (Directory.Exists(sourcePath))
+                await CopyDirectoryAsync(sourcePath, destination, tracker, ct);
             else
-                await CopyFileTrackedAsync(item.Path, destination, tracker, ct);
+                await CopyFileTrackedAsync(sourcePath, destination, tracker, ct);
 
             manifest.Files.Add(new PackageManifest.FileEntry
             {
@@ -195,7 +212,8 @@ public sealed class PackageBuilder
                 _log.Report($"Instellingen kopiëren: {app.DisplayName} ...");
                 Directory.CreateDirectory(appStagingDir);
                 string dataDestination = Path.Combine(appStagingDir, "data");
-                await CopyDirectoryAsync(dataFolder, dataDestination, tracker, ct);
+                string vssDataFolder = vssSession?.TranslateToSnapshotPath(dataFolder) ?? dataFolder;
+                await CopyDirectoryAsync(vssDataFolder, dataDestination, tracker, ct);
                 entry.HasDataFolder = true;
                 hasAnySource = true;
             }

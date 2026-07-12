@@ -91,6 +91,19 @@ public partial class MainWindow : Window
             : "Let op: deze app draait NIET met adminrechten - Wifi/netwerkadapter/ontbrekende mappen vragen bij gebruik alsnog om een eigen UAC-bevestiging.");
 
         Closing += (_, _) => _discoveryResponderCts?.Cancel();
+        Loaded += (_, _) => CheckBackupReminder();
+    }
+
+    private void CheckBackupReminder()
+    {
+        if (!BackupReminder.ShouldRemind(out int daysSinceLast)) return;
+        string msg = daysSinceLast < 0
+            ? "Je hebt nog nooit een back-up gemaakt met PCTransfer11. Wil je dat nu doen?"
+            : $"Je laatste back-up was {daysSinceLast} dagen geleden. Wil je nu een nieuwe back-up maken?";
+        var result = MessageBox.Show(msg + "\n\nKlik 'Ja' om naar het Selecteren-scherm te gaan.",
+            "PCTransfer11 - Back-up herinnering", MessageBoxButton.YesNo, MessageBoxImage.Information);
+        if (result == MessageBoxResult.Yes)
+            MainTabControl.SelectedIndex = 0;
     }
 
     private void InitializeFileItems()
@@ -191,6 +204,13 @@ public partial class MainWindow : Window
             IsChecked = supported,
             IsSupported = supported
         };
+    }
+
+    private void ShowQrCode_Click(object sender, RoutedEventArgs e)
+    {
+        string pin = ReceivePinText.Text.Replace("PIN: ", "").Trim();
+        if (!string.IsNullOrEmpty(pin))
+            new QrCodeWindow(pin, this).ShowDialog();
     }
 
     private void OpenLogFolder_Click(object sender, RoutedEventArgs e)
@@ -314,6 +334,7 @@ public partial class MainWindow : Window
         string pin = NetworkCrypto.GeneratePin();
         ReceivePinText.Text = $"PIN: {pin}";
         ReceivePinText.Visibility = Visibility.Visible;
+        ShowQrCodeButton.Visibility = Visibility.Visible;
         ReceivePinHintText.Visibility = Visibility.Visible;
         Log($"PIN voor deze overdracht: {pin} - deel dit met de verzendende pc.");
 
@@ -445,6 +466,7 @@ public partial class MainWindow : Window
         {
             ReceivePinText.Visibility = Visibility.Collapsed;
             ReceivePinHintText.Visibility = Visibility.Collapsed;
+            ShowQrCodeButton.Visibility = Visibility.Collapsed;
             EndOperation();
         }
     }
@@ -647,6 +669,7 @@ public partial class MainWindow : Window
             if (!encrypt)
             {
                 await Task.Run(() => builder.BuildToDirectoryAsync(checkedFiles, checkedApps, backupFolder, _percentProgress, ct, _currentFileProgress), ct);
+                BackupReminder.RecordBackupMade();
                 MessageBox.Show(
                     $"Back-up gemaakt in:\n{backupFolder}\n\nJe kan deze map direct openen, bekijken en bewerken in Verkenner.",
                     "PCTransfer11", MessageBoxButton.OK, MessageBoxImage.Information);
