@@ -142,5 +142,5 @@ public static class BackupEncryption
     }
 
     private static byte[] DeriveKey(string password, byte[] salt) =>
-        Rfc2898DeriveBytes.Pbkdf2(password, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256, 32);
+        Rfc2898DeriveBytes.Pbkdf2(password.Trim(), salt, Pbkdf2Iterations, HashAlgorithmName.SHA256, 32);
 }
